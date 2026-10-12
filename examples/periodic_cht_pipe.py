@@ -26,11 +26,11 @@ R_OUT = R_IN + THICKNESS
 VEL_BC =  {"interface": ("W  ", 1),
            "inlet"    : ("P  ", 2),
            "outlet"   : ("P  ", 2)}
-TEMP_BC = {"inlet"    : ("P  ", 1),
-           "outlet"   : ("P  ", 1),
-           "solid_in" : ("P  ", 2),
-           "solid_out": ("P  ", 2),
-           "outer"    : ("I  ", 3)}
+TEMP_BC = {"outer"    : ("I  ", 1),
+           "inlet"    : ("P  ", 2),
+           "outlet"   : ("P  ", 2),
+           "solid_in" : ("P  ", 3),
+           "solid_out": ("P  ", 3)}
 BC = BoundaryConditions(velocity=VEL_BC, temperature=TEMP_BC)
 PERIODIC = [
     hexmesh.Periodic("inlet", "outlet", affine.translation([0.0, 0.0, LENGTH])),

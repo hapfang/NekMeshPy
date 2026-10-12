@@ -564,11 +564,11 @@ PERIODIC = [
     hexmesh.Periodic("cut_lo", "cut_hi", affine.translation([0.0, 0.0, LEAD])),
 ]
 TEMP_BC = {
-    "inlet":  ("P  ", 1),
-    "outlet": ("P  ", 2),
-    "cut_lo": ("P  ", 3),
-    "cut_hi": ("P  ", 4),
-    "outer":  ("f  ", 5),
+    "outer":  ("f  ", 1),
+    "inlet":  ("P  ", 2),
+    "outlet": ("P  ", 3),
+    "cut_lo": ("P  ", 4),
+    "cut_hi": ("P  ", 5),
 }
 
 print(hexmesh.report(mesh))
