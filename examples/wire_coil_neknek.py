@@ -156,7 +156,7 @@ def block(i, j, nr, nz, name, bottom="", top=""):
 rows = [N_ROWS, N_SIDE, N_ROWS]
 blocks = [block(0, j, 2, rows[j], "fluid", bottom="core") for j in range(3)]
 blocks += [block(1, j, N_SIDE - 1, N_ROWS, "fluid") for j in (0, 2)]
-blocks += [block(3, j, 2, rows[j], "solid", bottom="wall", top="outer") for j in range(3)]
+blocks += [block(3, j, 1, rows[j], "solid", bottom="wall", top="outer") for j in range(3)]
 
 section = quadmesh.merge(blocks + channels + [disc, ring, wall_layer], tol=1e-9)
 
