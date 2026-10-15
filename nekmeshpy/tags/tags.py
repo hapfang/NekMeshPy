@@ -12,7 +12,6 @@ from .._typing import BoolArray, IntArray, StrArray
 from ._arrays import _frozen, _str_array
 
 
-
 @dataclass(frozen=True, eq=False)
 class Tags:
     """A mesh's per-element region tags over ``size`` elements, stored **sparsely**:

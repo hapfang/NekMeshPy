@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from ..tags.tags import ElementTagSpec
 from ..pointmesh import tag as pointmesh
+from ..tags.tags import ElementTagSpec
 from .linemesh import LineMesh
 
 

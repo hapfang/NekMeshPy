@@ -33,6 +33,7 @@ from .quadmesh import NO_TAG, QuadMesh
 from .query import boundary_edges
 from .tag import retag_element, tag_edges
 
+
 def _named(qm: QuadMesh, element_tags: str | Tags | None) -> QuadMesh:
     return qm if element_tags is None else retag_element(qm, element_tags)
 
