@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal, overload
+from typing import Literal, Union, overload
 
 import numpy as np
 
 from .._typing import BoolArray, IntArray, StrArray
 from ._arrays import _frozen, _str_array
+
 
 
 @dataclass(frozen=True, eq=False)
@@ -177,6 +178,21 @@ class Tags:
         return "<Tags %d tagged {%s}>" % (len(self), ",".join(self.unique()))
 
     # -- operations ------------------------------------------------------
+    def retag(self, spec: "ElementTagSpec") -> Tags:
+        """One entry point for changing a table, by what ``spec`` is: a mapping
+        :meth:`rename` the existing vocabulary; a string names every element; a
+        ``Tags`` or a per-element sequence replaces the table outright (and must be over
+        this table's ``size``)."""
+        if isinstance(spec, Mapping):
+            return self.rename(spec)
+        if isinstance(spec, str):
+            return Tags.full(self.size, spec)
+        t = spec if isinstance(spec, Tags) else Tags.from_dense(spec)
+        if t.size != self.size:
+            raise ValueError("retag: table is over %d elements, mesh has %d"
+                             % (t.size, self.size))
+        return t
+
     def rename(self, mapping: Mapping[str, str]) -> Tags:
         """The same elements under a new vocabulary: a tag the map does not name is
         left alone, the map applies simultaneously, two keys may share an image, and a
@@ -317,3 +333,6 @@ class Tags:
             return Tags.empty(size)
         m = np.asarray(new_id_of, dtype=np.int64).reshape(-1)
         return Tags(m[self.ids], self.tags, size)
+
+
+ElementTagSpec = Union[Mapping[str, str], str, Tags, Sequence[str], StrArray]

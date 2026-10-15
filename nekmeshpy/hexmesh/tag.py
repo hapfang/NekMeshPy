@@ -10,25 +10,21 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
+from ..tags.tags import ElementTagSpec
 from .._typing import IntArray, StrArray
 from ..quadmesh import QuadMesh
 from ..quadmesh import tag as quadmesh
 from .hexmesh import HexMesh
 
 
-def retag_element(mesh: HexMesh, mapping: Mapping[str, str]) -> HexMesh:
-    """The same mesh with its ``element_tags`` renamed through ``mapping``.
-
-    A tag the map does not name is left alone; a tag renamed to ``NO_TAG`` becomes
-    untagged. The map applies simultaneously, so ``{"a": "b", "b": "a"}`` swaps the
-    two, and two keys may share an image, which merges those regions. A key that
-    names no tag on this mesh raises -- a rename matching nothing is a typo, and a
-    mis-named region is not visible again until the solver reads it.
-
-    The region vocabulary and the boundary-condition vocabulary are different tables,
-    so renaming one never disturbs the other even where they share a word."""
+def retag_element(mesh: HexMesh, tags: ElementTagSpec) -> HexMesh:
+    """The same mesh with its ``element_tags`` changed, by what ``tags`` is: a mapping
+    renames the existing names (a tag the map does not name is left alone, the map
+    applies simultaneously, a key naming nothing raises, a rename to ``NO_TAG`` untags);
+    a string names every element; a ``Tags`` or per-element sequence replaces the table.
+    Geometry and the side tags are untouched."""
     return HexMesh(mesh.quad_mesh, mesh.hexes, mesh.orient, mesh.interior,
-                   mesh.element_tags.rename(mapping))
+                   mesh.element_tags.retag(tags))
 
 
 def retag_face(mesh: HexMesh, mapping: Mapping[str, str]) -> HexMesh:

@@ -31,7 +31,11 @@ from .assemble import loft_fn, merge
 from .lift import from_grid
 from .quadmesh import NO_TAG, QuadMesh
 from .query import boundary_edges
-from .tag import tag_edges
+from .tag import retag_element, tag_edges
+
+def _named(qm: QuadMesh, element_tags: str | Tags | None) -> QuadMesh:
+    return qm if element_tags is None else retag_element(qm, element_tags)
+
 
 #: The four sides of a :func:`structured <nekmeshpy.quadmesh.shape.structured>` patch, in the CCW loop order its ``edges``
 #: are consumed in.  Both the ``edges`` mapping and ``side_tags`` are keyed by these.
@@ -66,6 +70,7 @@ def rectangle(corners: PointArray | Sequence[Point], nx: int, ny: int, *,
               x_frac: FloatArray | None = None,
               y_frac: FloatArray | None = None,
               side_tags: Mapping[str, str] | None = None,
+              element_tags: str | Tags | None = None,
               order: int = 1) -> QuadMesh:
     """Structured quad grid over the rectangle with four CCW corners ``corners = [c0,
     c1, c2, c3]``: ``nx`` cells along ``c0->c1`` (bottom/top), ``ny`` along ``c1->c2``
@@ -82,7 +87,7 @@ def rectangle(corners: PointArray | Sequence[Point], nx: int, ny: int, *,
              ("top", c[2], c[3], xf), ("left", c[3], c[0], yf))
     edges = [line(a, b, frac, element_tag=st.get(side, ""), order=order)
              for side, a, b, frac in specs]
-    return structured(edges)
+    return structured(edges, element_tags=element_tags)
 
 
 def _chain_intervals(edge: LineMesh, name: str) -> IntArray:
@@ -224,7 +229,8 @@ def _slice_chain(chain: LineMesh, a: int, b: int) -> LineMesh:
 
 
 def structured(edges: Sequence[LineMesh] | Mapping[str, LineMesh], *,
-               side_tags: Mapping[str, str] | None = None) -> QuadMesh:
+               side_tags: Mapping[str, str] | None = None,
+               element_tags: str | Tags | None = None) -> QuadMesh:
     """Transfinite (Coons-patch) quad grid over the surface bounded by four open edge
     lines ``edges = [bottom, right, top, left]`` in CCW loop order. The lines must share
     corners (form a closed loop)."""
@@ -336,12 +342,12 @@ def structured(edges: Sequence[LineMesh] | Mapping[str, LineMesh], *,
         qm = tag_edges(QuadMesh(lm, elem_edges, flip, interior, qm.element_tags),
                        np.asarray(rows_all, dtype=np.int64).reshape(-1, 2),
                        np.asarray(names_all, dtype=np.str_))
-    return qm
+    return _named(qm, element_tags)
 
 
 def ogrid(boundary: LineMesh, n_side: int, radial: int | FloatArray, *,
           center_scale: float = 0.7, quadrant_scale: float = 0.7,
-          wall_tag: str = "") -> QuadMesh:
+          wall_tag: str = "", element_tags: str | Tags | None = None) -> QuadMesh:
     """O-grid filling the closed ``boundary``: four :func:`quadrant_ogrid
     <nekmeshpy.quadmesh.shape.quadrant_ogrid>` quarters meeting at the loop's centroid,
     split at the loop's own quarter points. ``center_scale`` places each quarter's own
@@ -376,14 +382,15 @@ def ogrid(boundary: LineMesh, n_side: int, radial: int | FloatArray, *,
             for a, b in zip(starts, starts[1:] + [P])]
     seams = [line(centroid, a.points[0], fr, order=boundary.order) for a in arcs]
     seams.append(seams[0])
-    return merge([quadrant_ogrid(arcs[q], seams[q], seams[q + 1], radial,
+    return _named(merge([quadrant_ogrid(arcs[q], seams[q], seams[q + 1], radial,
                                  center_scale=center_scale, wall_tag=wall_tag)
-                 for q in range(4)])
+                 for q in range(4)]), element_tags)
 
 
 def half_ogrid(arc: LineMesh, spine: LineMesh,
                radial: int | FloatArray, *, center_scale: float = 0.7,
-               quadrant_scale: float = 0.7, wall_tag: str = "") -> QuadMesh:
+               quadrant_scale: float = 0.7, wall_tag: str = "",
+               element_tags: str | Tags | None = None) -> QuadMesh:
     """Structured half-circle O-grid over a half-disk split along the ``spine`` line
     (A1..A2); the wall ``arc`` (``(4*Ntheta+1, 3)``, arc[0]=A1, arc[-1]=A2) is the open
     boundary. Built as two :func:`quadrant_ogrid
@@ -432,7 +439,7 @@ def half_ogrid(arc: LineMesh, spine: LineMesh,
                         center_scale=center_scale, wall_tag=wall_tag)
     qb = quadrant_ogrid(arc_b, seam_apex, seam_a2, radial,
                         center_scale=center_scale, wall_tag=wall_tag)
-    return merge([qa, qb])
+    return _named(merge([qa, qb]), element_tags)
 
 
 #: The two nameable seams of a :func:`quadrant_ogrid <nekmeshpy.quadmesh.shape.quadrant_ogrid>`, in the order its arguments
@@ -658,7 +665,8 @@ def spine_fractions(n_theta: int, radial: int | FloatArray,
 
 def spined_ogrid(boundary: LineMesh, radial: int | FloatArray, *,
                  spine: LineMesh | None = None, center_scale: float = 0.7,
-                 quadrant_scale: float = 0.7, wall_tag: str = "") -> QuadMesh:
+                 quadrant_scale: float = 0.7, wall_tag: str = "",
+                 element_tags: str | Tags | None = None) -> QuadMesh:
     """Full-disk O-grid over a closed ``boundary`` split along a spine diameter into two
     :func:`half_ogrid <nekmeshpy.quadmesh.shape.half_ogrid>` halves (each in turn built
     from two :func:`quadrant_ogrid <nekmeshpy.quadmesh.shape.quadrant_ogrid>` quarters)
@@ -704,7 +712,7 @@ def spined_ogrid(boundary: LineMesh, radial: int | FloatArray, *,
                     quadrant_scale=quadrant_scale, wall_tag=wall_tag)
     h2 = half_ogrid(arc2, spine2, radial, center_scale=center_scale,
                     quadrant_scale=quadrant_scale, wall_tag=wall_tag)
-    return merge([h1, h2])
+    return _named(merge([h1, h2]), element_tags)
 
 
 # the six box faces: outward normal n with right-handed tangents (u x v = n),
@@ -752,6 +760,7 @@ def _axis_params(half_sizes: float | Sequence[float] | FloatArray,
 def box(half_sizes: float | Sequence[float] | FloatArray,
         n: int | Sequence[int] | IntArray, *,
         patch_tags: Mapping[str, str] | None = None,
+        element_tags: str | Tags | None = None,
         order: int = 1) -> QuadMesh:
     """Closed box surface centred at the origin: six quad patches welded with
     :func:`merge <nekmeshpy.quadmesh.assemble.merge>`. ``half_sizes`` is a scalar (cube)
@@ -771,7 +780,7 @@ def box(half_sizes: float | Sequence[float] | FloatArray,
         face = hs * (nv + A[..., None] * uv + B[..., None] * vv)
         patches.append(from_grid(face, element_tag=ft.get(key, ""),
                                           order=order))
-    return merge(patches)
+    return _named(merge(patches), element_tags)
 
 
 def sphere(radius: float, n: int | Sequence[int] | IntArray, *,
@@ -813,6 +822,7 @@ def half_box(half_sizes: float | Sequence[float] | FloatArray,
              n_vertical: int | None = None,
              patch_tags: Mapping[str, str] | None = None,
              rim_tag: str = "",
+             element_tags: str | Tags | None = None,
              order: int = 1) -> QuadMesh:
     """The upper half of a :func:`box <nekmeshpy.quadmesh.shape.box>`: the five patches
     of the box surface that bound ``[-sx, sx] x [-sy, sy] x [0, sz]``, welded with
@@ -845,7 +855,7 @@ def half_box(half_sizes: float | Sequence[float] | FloatArray,
                 + AY[..., None] * np.array([0.0, 1.0, 0.0]))
     patches.append(from_grid(top, element_tag=ft.get("z_max", ""),
                                       order=order))
-    return _tag_rim(merge(patches), rim_tag)
+    return _named(_tag_rim(merge(patches), rim_tag), element_tags)
 
 
 def hemisphere(radius: float, n: int | Sequence[int] | IntArray, *,

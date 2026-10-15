@@ -57,7 +57,7 @@ def extrude(
 
 def annulus(inner: LineMesh, outer: LineMesh, radial: int | FloatArray, *,
             inner_tag: str | None = None, outer_tag: str | None = None,
-            ) -> QuadMesh:
+            element_tags: str | Tags | None = None) -> QuadMesh:
     """Ring O-grid filling the region between an inner and an outer closed loop -- e.g.
     a circular body inside a square far-field box."""
     radial = validate_layers(radial)
@@ -90,7 +90,8 @@ def annulus(inner: LineMesh, outer: LineMesh, radial: int | FloatArray, *,
     # ring topology but drops element_tags (the wall tags ride in inner_caps /
     # outer_caps as the loft's cap tags).
     rings = line_blend(inner, outer, radial)
-    return loft(rings, first_tag=inner_caps, last_tag=outer_caps)
+    return loft(rings, element_tags=element_tags,
+                first_tag=inner_caps, last_tag=outer_caps)
 
 def from_grid(
     P: PointArray,

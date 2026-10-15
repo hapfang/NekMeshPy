@@ -10,20 +10,19 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from ..tags.tags import ElementTagSpec
 from ..pointmesh import tag as pointmesh
 from .linemesh import LineMesh
 
 
-def retag_element(mesh: LineMesh, mapping: Mapping[str, str]) -> LineMesh:
-    """The same mesh with its ``element_tags`` renamed through ``mapping``.
-
-    A tag the map does not name is left alone; a tag renamed to ``""`` becomes
-    untagged. The map applies simultaneously, so ``{"a": "b", "b": "a"}`` swaps the
-    two, and two keys may share an image, which merges those regions. A key that
-    names no tag on this mesh raises -- a rename matching nothing is a typo, and a
-    mis-named region is not visible again until the solver reads it."""
+def retag_element(mesh: LineMesh, tags: ElementTagSpec) -> LineMesh:
+    """The same mesh with its ``element_tags`` changed, by what ``tags`` is: a mapping
+    renames the existing names (a tag the map does not name is left alone, the map
+    applies simultaneously, a key naming nothing raises, a rename to ``NO_TAG`` untags);
+    a string names every element; a ``Tags`` or per-element sequence replaces the table.
+    Geometry and the side tags are untouched."""
     return LineMesh(mesh.point_mesh, mesh.lines, mesh.interior,
-                    mesh.element_tags.rename(mapping))
+                    mesh.element_tags.retag(tags))
 
 
 def retag_point(mesh: LineMesh, mapping: Mapping[str, str]) -> LineMesh:

@@ -12,22 +12,21 @@ from collections.abc import Mapping, Sequence
 
 import numpy as np
 
+from ..tags.tags import ElementTagSpec
 from .._typing import IntArray, StrArray
 from ..linemesh import LineMesh
 from ..linemesh import tag as linemesh
 from .quadmesh import QuadMesh
 
 
-def retag_element(mesh: QuadMesh, mapping: Mapping[str, str]) -> QuadMesh:
-    """The same mesh with its ``element_tags`` renamed through ``mapping``.
-
-    A tag the map does not name is left alone; a tag renamed to ``NO_TAG`` becomes
-    untagged. The map applies simultaneously, so ``{"a": "b", "b": "a"}`` swaps the
-    two, and two keys may share an image, which merges those regions. A key that
-    names no tag on this mesh raises -- a rename matching nothing is a typo, and a
-    mis-named region is not visible again until the solver reads it."""
+def retag_element(mesh: QuadMesh, tags: ElementTagSpec) -> QuadMesh:
+    """The same mesh with its ``element_tags`` changed, by what ``tags`` is: a mapping
+    renames the existing names (a tag the map does not name is left alone, the map
+    applies simultaneously, a key naming nothing raises, a rename to ``NO_TAG`` untags);
+    a string names every element; a ``Tags`` or per-element sequence replaces the table.
+    Geometry and the side tags are untouched."""
     return QuadMesh(mesh.line_mesh, mesh.quads, mesh.orient, mesh.interior,
-                    mesh.element_tags.rename(mapping))
+                    mesh.element_tags.retag(tags))
 
 
 def retag_edge(mesh: QuadMesh, mapping: Mapping[str, str]) -> QuadMesh:

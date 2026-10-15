@@ -4,22 +4,18 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from ..tags.tags import ElementTagSpec
 from .pointmesh import PointMesh
 
 
-def retag_element(mesh: PointMesh, mapping: Mapping[str, str]) -> PointMesh:
-    """The same mesh with its ``element_tags`` renamed through ``mapping``.
-
-    A tag the map does not name is left alone; a tag renamed to ``NO_TAG`` becomes
-    untagged. The map applies simultaneously, so ``{"a": "b", "b": "a"}`` swaps the
-    two, and two keys may share an image. A key that names no tag on this mesh raises.
-
-    These are the tags a :class:`LineMesh <nekmeshpy.linemesh.LineMesh>` built on this
-    point set reads as its own point tags, so this is what
-    :func:`linemesh.retag_point <nekmeshpy.linemesh.tag.retag_point>` calls through to.
-    """
+def retag_element(mesh: PointMesh, tags: ElementTagSpec) -> PointMesh:
+    """The same mesh with its ``element_tags`` changed, by what ``tags`` is: a mapping
+    renames the existing names (a tag the map does not name is left alone, the map
+    applies simultaneously, a key naming nothing raises, a rename to ``NO_TAG`` untags);
+    a string names every element; a ``Tags`` or per-element sequence replaces the table.
+    Geometry and the side tags are untouched."""
     return PointMesh(mesh.points,
-                     mesh.element_tags.rename(mapping))
+                     mesh.element_tags.retag(tags))
 
 
 __all__ = [

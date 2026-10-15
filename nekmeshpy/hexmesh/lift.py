@@ -70,6 +70,7 @@ def annulus(
     *,
     inner_tag: str | None = None,
     outer_tag: str | None = None,
+    element_tags: str | Tags | None = None,
 ) -> HexMesh:
     """Shell O-grid filling the region between an inner and an outer closed quad surface
     (e.g. a sphere inside a cubic far-field box)."""
@@ -99,7 +100,8 @@ def annulus(
         inner_tag if inner_tag is not None else inner.element_tags or None)
     outer_caps: str | Tags | None = (
         outer_tag if outer_tag is not None else outer.element_tags or None)
-    return loft(shells, first_tag=inner_caps, last_tag=outer_caps)
+    return loft(shells, element_tags=element_tags,
+                first_tag=inner_caps, last_tag=outer_caps)
 
 def from_grid(
     P: PointArray,

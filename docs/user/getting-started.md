@@ -61,9 +61,9 @@ Restarting a run with velocity while keeping the high-order geometry
 ```
 # Nek5000 .par file
 [GENERAL]
-startFrom = "checkpoint1.f00000 v,case.f00000 x"
+startFrom = "checkpoint1.f00000 u p t,case.f00000 x"
 
 # NekRS .par file
 [GENERAL]
-startFrom = "checkpoint1.f00000+v,case.f00000+x"
+startFrom = "checkpoint1.f00000+u+p+t,case.f00000+x"
 ```

@@ -52,11 +52,6 @@ N_R = 10
 cut = quadmesh.shape._slice_chain
 
 
-def region(q, name):
-    return quadmesh.QuadMesh(q.line_mesh, q.quads, q.orient, q.interior,
-                             Tags.from_dense(np.full(q.n_quads, name)))
-
-
 def squircle(a, b):
     if b >= 0:
         return a, b
@@ -81,10 +76,10 @@ circle = linemesh.circle(RW, 4 * N_SIDE, center=(CZ, R_HELIX, 0), start_theta=np
 outer = linemesh.loft(loop, loop=True, order=ORDER)
 middle = linemesh.blend(outer, circle, [0.0, 0.5, 1.0])[1]
 
-disc = region(quadmesh.ogrid(circle, N_SIDE, 1, wall_tag="coil",
-                             center_scale=0.8, quadrant_scale=0.8), "solid")
+disc = quadmesh.ogrid(circle, N_SIDE, 1, wall_tag="coil",
+                      center_scale=0.8, quadrant_scale=0.8, element_tags="solid")
 
-ring = region(quadmesh.merge([
+ring = quadmesh.retag_element(quadmesh.merge([
     quadmesh.loft([cut(outer, N_SIDE + 1, 4 * N_SIDE - 1), cut(middle, N_SIDE + 1, 4 * N_SIDE - 1),
                    cut(circle, N_SIDE + 1, 4 * N_SIDE - 1)]),
     quadmesh.loft([cut(middle, 4 * N_SIDE - 1, 4 * N_SIDE), cut(circle, 4 * N_SIDE - 1, 4 * N_SIDE)]),
@@ -93,9 +88,9 @@ ring = region(quadmesh.merge([
 
 spoke_hi = 0.5 * (loop[0] + circle.points[0])
 spoke_lo = 0.5 * (loop[N_SIDE] + circle.points[N_SIDE])
-wall_layer = region(quadmesh.loft([
+wall_layer = quadmesh.loft([
     linemesh.loft(np.array([spoke_hi, loop[1], loop[2], loop[3], spoke_lo]), order=ORDER),
-    cut(circle, 0, N_SIDE)]), "fluid")
+    cut(circle, 0, N_SIDE)], element_tags="fluid")
 
 
 def hline(z, tag=None):
@@ -107,8 +102,9 @@ def channel(chain, z0, z1):
     zs = [z0 + (z1 - z0) * k / N_ROWS for k in range(N_ROWS + 1)]
     cap = "zhi" if z1 > z0 else "zlo"
     stack = [chain] + [hline(z) for z in zs[:-1]] + [hline(zs[-1], cap)]
-    q = quadmesh.loft(stack[::-1], first_tag=cap) if z1 > z0 else quadmesh.loft(stack)
-    return region(q, "fluid")
+    if z1 > z0:
+        return quadmesh.loft(stack[::-1], first_tag=cap, element_tags="fluid")
+    return quadmesh.loft(stack, element_tags="fluid")
 
 
 bc_top = linemesh.loft(np.array([middle.points[4 * N_SIDE - 1], middle.points[0], loop[1]]),
@@ -147,10 +143,10 @@ def edge(va, vb, n, tag=""):
 def block(i, j, nr, nz, name, bottom="", top=""):
     c0, c1, c2, c3 = (i, j), (i, j + 1), (i + 1, j + 1), (i + 1, j)
     sfx = "_solid" if name == "solid" else ""
-    q = quadmesh.structured([
+    return quadmesh.structured([
         edge(c0, c1, nz, bottom), edge(c1, c2, nr, "zhi" + sfx if j == 2 else ""),
-        edge(c2, c3, nz, top), edge(c3, c0, nr, "zlo" + sfx if j == 0 else "")])
-    return region(q, name)
+        edge(c2, c3, nz, top), edge(c3, c0, nr, "zlo" + sfx if j == 0 else "")],
+        element_tags=name)
 
 
 rows = [N_ROWS, N_SIDE, N_ROWS]

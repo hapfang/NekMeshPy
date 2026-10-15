@@ -48,7 +48,6 @@ import numpy as np
 
 from nekmeshpy import BoundaryConditions, hexmesh, linemesh, quadmesh, writer
 from nekmeshpy.core.fields import geometric_spacing, gll_nodes
-from nekmeshpy.quadmesh import QuadMesh
 from nekmeshpy.tags import Tags
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -243,14 +242,6 @@ def cell_boundary(V, per_side, order, wire_dir):
     return linemesh.loft(pts, loop=True, interior=interior, order=order), interior
 
 
-def region(section, tag):
-    """``section`` with every quad tagged ``tag``.  The quad rung's factories take no
-    region argument -- ``element_tags`` enters at the sweep that lifts a section into a
-    volume -- so a 2-D region is named by rebuilding the container over its own parts."""
-    return QuadMesh(section.line_mesh, section.quads, section.orient,
-                    section.interior, Tags.full(section.n_quads, tag))
-
-
 def key(vertex):
     """A hashable identity for a cell vertex, tight enough that only coincident
     vertices collide (cell vertices are ``PITCH/sqrt(3)`` apart at the closest)."""
@@ -294,12 +285,11 @@ def build_section(wire_theta):
         # so the two families have to agree: reversing **both** of an annulus's loops
         # leaves the index pairing -- and so the geometry -- untouched and flips the
         # winding to match the O-grid.
-        blocks.append(region(
-            quadmesh.ogrid(wall, N_CIRC // 4, N_CORE, wall_tag="rod_surface"), "rod"))
-        blocks.append(region(
-            quadmesh.annulus(linemesh.reverse(wall), linemesh.reverse(cell),
-                             geometric_spacing(N_COOL, COOL_GRADING),
-                             inner_tag="rod_surface"), "fluid"))
+        blocks.append(quadmesh.ogrid(wall, N_CIRC // 4, N_CORE, wall_tag="rod_surface",
+                                     element_tags="rod"))
+        blocks.append(quadmesh.annulus(linemesh.reverse(wall), linemesh.reverse(cell),
+                                       geometric_spacing(N_COOL, COOL_GRADING),
+                                       inner_tag="rod_surface", element_tags="fluid"))
 
         for s in range(6):
             di, dj = NEIGHBOUR[s]
@@ -350,13 +340,11 @@ def build_section(wire_theta):
     duct_in = linemesh.loft(duct_in_pts, loop=True, order=ORDER)
     duct_out = linemesh.loft(duct_out_pts, loop=True, order=ORDER)
 
-    blocks.append(region(quadmesh.annulus(linemesh.reverse(inner),
-                                          linemesh.reverse(duct_in), N_GAP,
-                                          outer_tag="duct_surface"), "fluid"))
-    blocks.append(region(quadmesh.annulus(linemesh.reverse(duct_in),
-                                          linemesh.reverse(duct_out), N_DUCT,
-                                          inner_tag="duct_surface",
-                                          outer_tag="outer"), "duct"))
+    blocks.append(quadmesh.annulus(linemesh.reverse(inner), linemesh.reverse(duct_in),
+                                   N_GAP, outer_tag="duct_surface", element_tags="fluid"))
+    blocks.append(quadmesh.annulus(linemesh.reverse(duct_in), linemesh.reverse(duct_out),
+                                   N_DUCT, inner_tag="duct_surface", outer_tag="outer",
+                                   element_tags="duct"))
 
     return quadmesh.merge(blocks)
 

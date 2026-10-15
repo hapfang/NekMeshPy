@@ -3,7 +3,6 @@ import numpy as np
 from nekmeshpy import BoundaryConditions, hexmesh, linemesh, quadmesh, writer
 from nekmeshpy.core import affine
 from nekmeshpy.core.fields import geometric_spacing
-from nekmeshpy.quadmesh import QuadMesh
 from nekmeshpy.tags import Tags
 
 # -- parameters --------------------------------------------------------------
@@ -38,21 +37,15 @@ PERIODIC = [
 ]
 
 
-def region(section, tag):
-    """``section`` with every quad tagged ``tag``: the quad rung's factories take no region
-    argument, so a 2-D region is named by rebuilding the container over its own parts."""
-    return QuadMesh(section.line_mesh, section.quads, section.orient,
-                    section.interior, Tags.full(section.n_quads, tag))
-
-
 # -- the 2-D cross-section, meshed in full ----------------------------------
 inner = linemesh.circle(R_IN, 4 * N_SIDE, order=ORDER)
 outer = linemesh.circle(R_OUT, 4 * N_SIDE, order=ORDER)
 
-fluid = region(quadmesh.ogrid(inner, N_SIDE, N_RADIAL, wall_tag="interface"), "fluid")
-solid = region(quadmesh.annulus(
+fluid = quadmesh.ogrid(inner, N_SIDE, N_RADIAL, wall_tag="interface", element_tags="fluid")
+solid = quadmesh.annulus(
     linemesh.reverse(inner), linemesh.reverse(outer),
-    geometric_spacing(N_WALL, 1.0), inner_tag="interface", outer_tag="outer"), "solid")
+    geometric_spacing(N_WALL, 1.0), inner_tag="interface", outer_tag="outer",
+    element_tags="solid")
 
 # the interface stays named: it is the face a wall condition goes on
 section = quadmesh.attach(

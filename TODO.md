@@ -1,5 +1,4 @@
 Local, immediate simple tasks that can be done right away
-- [ ] 4) Plottings utils or simply vtk export the full scene
 - [ ] 7) Mapping of grid on parametric curves
     - [ ] Similarly for cob tjunction
 - [ ] 8) TriMesh.isosurface should return LineMesh
@@ -13,10 +12,10 @@ Local, immediate simple tasks that can be done right away
     - [ ] Inputs: Dirichlets faces, Dirichlets values
 - [ ] 16) Check element overlap
 - [ ] 18) p-refine/h-refine
-- [ ] 19) Self-attach (like wirecoil)
-- [ ] 20) boundaryID export
-- [ ] 21) Move Using a high-order mesh in Nek5000 / NekRS to Getting Started and also guide on cbc/boundaryID
-- [ ] 23) move wirecoil up gallery
 - [ ] 24) Use center node in re2 for order=2
 - [ ] 25) None vs "" in tags?
 - [ ] 26) More than 1 scalar BC
+- [ ] 27) loft: option to propagate side tag and/or propagate element tag
+- [ ] 28) Move periodiccondition out of hex class
+- [ ] 29) region(mesh, tag)
+

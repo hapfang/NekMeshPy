@@ -200,6 +200,7 @@ def rectangle(width: float, height: float, n: int, *,
               center: Point = (0.0, 0.0, 0.0),
               normal: Vec3 = (0.0, 0.0, 1.0),
               side_tags: Mapping[str, str] | None = None,
+              element_tags: str | Tags | None = None,
               order: int = 1) -> LineMesh:
     """A closed rectangle loop of the given ``width`` x ``height`` about ``center`` in
     the plane with the given ``normal`` (default ``+z``), discretized into ``n`` line
@@ -234,11 +235,16 @@ def rectangle(width: float, height: float, n: int, *,
                     "bottom/right/top/left, got %r" % key)
         tags = [t for side in sides for t in [side_tags.get(side, "")] * m]
     # every side is straight, so ``loft``'s default straight GLL interior is exact
+    if tags is not None and element_tags is not None:
+        raise ValueError("rectangle: give side_tags or element_tags, not both")
     lm = loft(pts, loop=True, order=order)
-    if tags is None:
+    if tags is not None:
+        element_tags = Tags.from_dense(tags)
+    elif isinstance(element_tags, str):
+        element_tags = Tags.full(lm.n_lines, element_tags)
+    if element_tags is None:
         return lm
-    return LineMesh(lm.point_mesh, lm.lines, lm.interior,
-                    Tags.from_dense(tags))
+    return LineMesh(lm.point_mesh, lm.lines, lm.interior, element_tags)
 
 __all__ = [
     "arc",
