@@ -339,6 +339,154 @@ def is_overlap_free(points: PointArray, hexes: IntArray) -> bool:
     return count_overlapping_pairs(points, hexes) == 0
 
 
+# -- quad (section) meshes ----------------------------------------------
+_QUAD_EDGE_POINTS = np.array([[0, 1], [1, 2], [2, 3], [3, 0]], dtype=np.int64)
+
+
+def quad_report(points: PointArray, quads: IntArray) -> TopologyReport:
+    """Topology / watertightness report for an all-quad mesh -- :func:`hex_report` one
+    rung down: the facets are edges, the boundary is a curve, and the boundary's own
+    "open edge" is an **open point** (a boundary point not shared by exactly two
+    boundary edges), which is what :attr:`TopologyReport.n_open_edges` counts here."""
+    X = np.asarray(points, dtype=float)
+    QC = np.asarray(quads, dtype=np.int64).reshape(-1, 4)
+    N = QC.shape[0]
+    edges = QC[:, _QUAD_EDGE_POINTS].reshape(N * 4, 2)
+    keys = np.sort(edges, axis=1)
+    _, inverse, counts = conform.unique_rows(keys, return_counts=True)
+
+    n_boundary = int(np.sum(counts == 1))
+    n_internal = int(np.sum(counts == 2))
+    n_nonmanifold = int(np.sum(counts >= 3))
+
+    bmask = counts[inverse] == 1
+    bedges = keys[bmask]
+    if bedges.size:
+        _, bpc = np.unique(bedges, return_counts=True)
+        n_open = int(np.sum(bpc != 2))
+        bpoints = np.unique(bedges)
+    else:
+        n_open, bpoints = 0, np.zeros(0, np.int64)
+    n_hanging = _count_hanging_points(X, bedges, bpoints)
+
+    owner: IntArray = np.repeat(np.arange(N, dtype=np.int64), 4)
+    n_components = _count_components(N, _adjacency_edges(inverse, counts, owner))
+
+    watertight = bool(n_nonmanifold == 0 and n_open == 0 and n_boundary > 0)
+    return TopologyReport(
+        n_elements=N,
+        n_faces=int(counts.size),
+        n_boundary_faces=n_boundary,
+        n_internal_faces=n_internal,
+        n_nonmanifold_faces=n_nonmanifold,
+        n_open_edges=n_open,
+        n_hanging_points=n_hanging,
+        n_components=n_components,
+        watertight=watertight,
+        conformal=bool(n_hanging == 0),
+    )
+
+
+def _quad_geometry(X: PointArray, QC: IntArray) -> tuple[
+        PointArray, PointArray, PointArray, PointArray, PointArray]:
+    """Per-quad centroid, bounding-circle radius, the ``(N,4,3)`` edge start points
+    and outward in-plane unit normals, and the ``(N,9,3)`` sample points (4 corners,
+    4 edge midpoints, the centroid).  The plane is each quad's own mean-direction
+    normal, so a section placed anywhere in space is read in its own plane; the
+    outward sign comes from the centroid, not the stored winding."""
+    corners = X[QC]                                              # (N,4,3)
+    centroid = corners.mean(axis=1)
+    radius = np.linalg.norm(corners - centroid[:, None, :], axis=2).max(axis=1)
+    nxt = np.roll(corners, -1, axis=1)
+    edge = nxt - corners                                         # (N,4,3)
+    plane = np.cross(corners - centroid[:, None, :], nxt - centroid[:, None, :]).sum(
+        axis=1)
+    plane_len = np.linalg.norm(plane, axis=1, keepdims=True)
+    plane = plane / np.where(plane_len == 0.0, 1.0, plane_len)
+    normal = np.cross(edge, plane[:, None, :])
+    mid = 0.5 * (corners + nxt)
+    sign = np.sign(np.einsum("nfd,nfd->nf", normal, mid - centroid[:, None, :]))
+    sign[sign == 0.0] = 1.0
+    normal = normal * sign[..., None]
+    length = np.linalg.norm(normal, axis=-1, keepdims=True)
+    normal = normal / np.where(length == 0.0, 1.0, length)
+    samples = np.concatenate([corners, mid, centroid[:, None, :]], axis=1)
+    return centroid, radius, corners, normal, samples
+
+
+def _count_overlapping_quad_pairs(X: PointArray, QC: IntArray) -> int:
+    """Pairs of quads whose areas geometrically overlap -- :func:`_count_overlapping_pairs`
+    in 2-D: any of one's corners, edge midpoints or centroid sits strictly inside the
+    other, past a half-plane test on all 4 of its edges (each quad is star-convex about
+    its own centroid).  Adjacent pairs are not excluded; a shared edge's points sit
+    exactly on the boundary, not strictly inside it.  A coincident centroid is a
+    duplicate."""
+    N = QC.shape[0]
+    if N < 2:
+        return 0
+    centroid, radius, vertex, normal, samples = _quad_geometry(X, QC)
+    scale = conform.bbox_scale(X)
+    tol = 1e-6 * (scale if scale > 0.0 else 1.0)
+
+    tree = cKDTree(centroid)
+    pairs = tree.query_pairs(r=2.0 * float(radius.max()), output_type="ndarray")
+    if pairs.size == 0:
+        return 0
+    d = np.linalg.norm(centroid[pairs[:, 0]] - centroid[pairs[:, 1]], axis=1)
+    keep = d < (radius[pairs[:, 0]] + radius[pairs[:, 1]])
+    pairs, d = pairs[keep], d[keep]
+    if pairs.size == 0:
+        return 0
+
+    i, j = pairs[:, 0], pairs[:, 1]
+    hit = np.zeros(i.size, dtype=bool)
+    for lo in range(0, i.size, _OVERLAP_BATCH):
+        sl = slice(lo, lo + _OVERLAP_BATCH)
+        for a, b in ((i[sl], j[sl]), (j[sl], i[sl])):
+            diff = samples[a][:, :, None, :] - vertex[b][:, None, :, :]   # (k,9,4,3)
+            dist = np.einsum("kpfd,kfd->kpf", diff, normal[b])
+            hit[sl] |= np.any(np.all(dist < -tol, axis=2), axis=1)
+    return int(np.count_nonzero(hit | (d < tol)))
+
+
+def count_overlapping_quad_pairs(points: PointArray, quads: IntArray) -> int:
+    """Number of quad pairs whose areas geometrically overlap -- independent of, and
+    not part of, :func:`quad_report`, for the same cost reason as
+    :func:`count_overlapping_pairs`."""
+    return _count_overlapping_quad_pairs(
+        np.asarray(points, dtype=float),
+        np.asarray(quads, dtype=np.int64).reshape(-1, 4))
+
+
+def is_overlap_free_quads(points: PointArray, quads: IntArray) -> bool:
+    """``True`` if no two quads geometrically overlap (see
+    :func:`count_overlapping_quad_pairs`)."""
+    return count_overlapping_quad_pairs(points, quads) == 0
+
+
+class TagReport(NamedTuple):
+    """How a mesh's side-tag table lines up with its **topological** boundary -- the
+    same report at the hex rung (faces) and the quad rung (edges).
+
+    The two are independent by design -- ``boundary`` is what connectivity says, a
+    side-tag table is a named subset that may also name interior entities -- so they can
+    disagree in exactly two ways, and both are worth seeing. An
+    :attr:`n_untagged_boundary` above zero means the export has open sides no boundary
+    condition covers; an :attr:`n_tagged_interior` above zero means it will write
+    boundary conditions onto sides that are not on the boundary at all. Either can be
+    deliberate (a flux-measurement plane is a tagged interior face; so is a conjugate
+    fluid/solid interface that keeps the fluid's wall condition), so these are counts
+    to recognise, not assertions."""
+
+    #: Named sides. One tag per shared entity, so this counts entities, not rows -- the
+    #: two could differ only while a tag was addressed by ``(element, side)``.
+    n_rows: int
+    #: Sides on the topological boundary that carry no name.
+    n_untagged_boundary: int
+    #: Named sides that are **not** on the topological boundary.
+    n_tagged_interior: int
+
+
 # -- triangle (surface) meshes ------------------------------------------
 def surface_report(points: PointArray, tris: IntArray) -> dict[str, Any]:
     """Topology report for a triangle surface mesh."""
@@ -389,15 +537,23 @@ def is_closed(points: PointArray, tris: IntArray) -> bool:
 
 
 # -- reporting ----------------------------------------------------------
-def format_report(report: Union[TopologyReport, dict[str, Any]]) -> str:
-    """Human-readable multi-line summary of a hex or surface report."""
+def format_report(report: Union[TopologyReport, dict[str, Any]],
+                  kind: str = "hex") -> str:
+    """Human-readable multi-line summary of a hex, quad or surface report.
+
+    ``kind`` (``"hex"`` or ``"quad"``) only changes the vocabulary: a quad mesh's
+    facets are edges, and its boundary's open edge is an open point."""
     if isinstance(report, TopologyReport):
+        quad = kind == "quad"
         return "\n".join([
-            "hex elements   : %d" % report.n_elements,
-            "faces          : %d (%d boundary, %d internal, %d non-manifold)"
+            "quad elements  : %d" % report.n_elements if quad
+            else "hex elements   : %d" % report.n_elements,
+            ("edges          : %d (%d boundary, %d internal, %d non-manifold)" if quad
+             else "faces          : %d (%d boundary, %d internal, %d non-manifold)")
             % (report.n_faces, report.n_boundary_faces,
                report.n_internal_faces, report.n_nonmanifold_faces),
-            "open edges     : %d" % report.n_open_edges,
+            ("open points    : %d" if quad else "open edges     : %d")
+            % report.n_open_edges,
             "hanging points  : %d" % report.n_hanging_points,
             "components     : %d" % report.n_components,
             "watertight     : %s" % report.watertight,

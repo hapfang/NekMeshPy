@@ -6,7 +6,7 @@ from .core.boundary_condition import BoundaryConditions
 from .core.fields import AxisLinearField, ConstantField, DistanceField, Field, MinField
 from .core.mesh import Mesh
 from .hexmesh import HexMesh
-from .io import writer
+from .io import reader, writer
 from .linemesh import LineMesh
 from .pointmesh import PointMesh
 from .quadmesh import NO_TAG, QuadMesh
@@ -31,6 +31,7 @@ __all__ = [
     "BoundaryConditions",
     "topology",
     "fields",
+    "reader",
     "writer",
     "Field", "ConstantField", "AxisLinearField", "DistanceField", "MinField",
 ]

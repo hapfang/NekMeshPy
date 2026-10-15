@@ -12,11 +12,13 @@ from .._typing import (
     IntArray,
     Point,
     PointArray,
+    StrArray,
     Vec3,
 )
 from ..core import conform, frames, measure
 from ..core.interp import corner_indices
 from ..core.quality import QualitySummary
+from ..core.topology import TagReport, TopologyReport
 from .quadmesh import QuadMesh
 
 
@@ -154,17 +156,146 @@ def tagged_edges(mesh: QuadMesh, tag: str) -> IntArray:
     return t.flatnonzero(tag, strict=True)
 
 
+def boundary_edge_ids(mesh: QuadMesh) -> BoolArray:
+    """``(n_edges,)`` mask of the shared edges carried by exactly one quad.
+
+    The edge-id form of :func:`boundary_edges`, and the cheaper one: the edges are
+    already deduplicated in ``line_mesh``, so this is a bincount over the incidence.
+    It is how a name is checked against the topology it was meant for --
+    ``edge_tags.ids`` outside this mask are the tagged interior edges
+    :func:`tag_report` counts."""
+    return np.asarray(
+        np.bincount(np.asarray(mesh.quads, dtype=np.int64).ravel(),
+                    minlength=mesh.line_mesh.n_lines) == 1, dtype=bool)
+
+
+def edge_rows(mesh: QuadMesh, edges: IntArray) -> tuple[IntArray, IntArray]:
+    """``((K,2) [quad, local edge 1-4] rows, (len(edges),) occurrence counts)`` -- the
+    inverse of ``quads``, for the given shared-edge ids; the quad rung's
+    :func:`hexmesh.face_rows <nekmeshpy.hexmesh.query.face_rows>`.
+
+    A **boundary** edge is carried by one quad and yields one row, an **interior** one
+    by two and yields two, so ``counts`` is how a caller expands a per-edge value onto
+    the rows it produced."""
+    ids: IntArray = np.asarray(edges, dtype=np.int64).reshape(-1)
+    if not ids.shape[0]:
+        return np.zeros((0, 2), dtype=np.int64), np.zeros(0, dtype=np.int64)
+    flat: IntArray = np.asarray(mesh.quads, dtype=np.int64).ravel()
+    order = np.argsort(flat, kind="stable")
+    lo = np.searchsorted(flat[order], ids, side="left")
+    hi = np.searchsorted(flat[order], ids, side="right")
+    counts: IntArray = (hi - lo).astype(np.int64)
+    bounds: list[tuple[int, int]] = list(
+        zip(np.asarray(lo, dtype=np.int64).tolist(),
+            np.asarray(hi, dtype=np.int64).tolist()))
+    picks: list[IntArray] = [np.arange(a, b, dtype=np.int64) for a, b in bounds]
+    slots: IntArray = order[np.concatenate(picks) if picks
+                            else np.zeros(0, dtype=np.int64)]
+    return np.column_stack([slots // 4, slots % 4 + 1]).astype(np.int64), counts
+
+
+def edge_tag_rows(mesh: QuadMesh) -> tuple[IntArray, StrArray]:
+    """``((K,2) [quad, local edge 1-4] rows, their tags)`` for every named edge,
+    lexsorted by ``(quad, edge)`` -- :func:`edge_rows` run over ``edge_tags.ids``; the
+    quad rung's :func:`hexmesh.face_tag_rows <nekmeshpy.hexmesh.query.face_tag_rows>`."""
+    named = mesh.line_mesh.element_tags
+    if not len(named):
+        return np.zeros((0, 2), dtype=np.int64), named.tags
+    rows, counts = edge_rows(mesh, named.ids)
+    tags: StrArray = np.repeat(named.tags, counts)
+    p = np.lexsort((rows[:, 1], rows[:, 0]))
+    return rows[p], tags[p]
+
+
+def topology_report(mesh: QuadMesh) -> TopologyReport:
+    """Watertightness / connectivity report of the mesh."""
+    from ..core import topology
+    return topology.quad_report(mesh.points, mesh.corners)
+
+
+def is_watertight(mesh: QuadMesh) -> bool:
+    """``True`` if the mesh boundary is a closed curve and the mesh is a single
+    connected component. Does not imply conformity."""
+    rep = topology_report(mesh)
+    return rep.watertight and rep.n_components == 1
+
+
+def is_conforming(mesh: QuadMesh) -> bool:
+    """``True`` if the mesh has no hanging points (no T-junctions)."""
+    return topology_report(mesh).conformal
+
+
+def is_overlap_free(mesh: QuadMesh) -> bool:
+    """``True`` if no two quads geometrically overlap. Independent of
+    :func:`is_watertight` and :func:`is_conforming`, which are purely topological
+    (facet-sharing) checks, and computed only when asked for, as at the hex rung."""
+    from ..core import topology
+    return topology.is_overlap_free_quads(mesh.points, mesh.corners)
+
+
+def tag_report(mesh: QuadMesh) -> TagReport:
+    """Cross-check ``edge_tags`` against the topological boundary (see
+    :class:`TagReport <nekmeshpy.core.topology.TagReport>`)."""
+    on_boundary = boundary_edge_ids(mesh)
+    et = mesh.edge_tags
+    named = et.is_tagged()
+    return TagReport(len(et),
+                     int(np.count_nonzero(on_boundary & ~named)),
+                     int(np.count_nonzero(named & ~on_boundary)))
+
+
+def report(mesh: QuadMesh) -> str:
+    """Human-readable summary: element/point counts, scaled-Jacobian quality (curved,
+    and on the solver-order lattice), per-name tagged-edge counts cross-checked against
+    the boundary (:func:`tag_report`), and the topology report -- the quad rung's
+    :func:`hexmesh.report <nekmeshpy.hexmesh.query.report>`.  There is no corner-only
+    reading and no linear one: ``.re2`` is hex-only, so nothing here is exported flat."""
+    import logging
+
+    from ..core import topology
+    from . import quality
+    lines = ["%d quad elements, %d points" % (mesh.n_quads, mesh.n_points)]
+    lines.append(quality.format_report(quality_summary(mesh)))
+    scan = quality.order_scan(mesh)
+    lines.append(quality.format_scan(scan, mesh.order))
+    if scan.orders and not scan.clean:
+        n, m = scan.worst
+        logging.getLogger(__name__).warning(
+            "mesh is clean at order %d but has %d inverted element(s) at sampling "
+            "order %d (min scaled Jacobian %.4f)",
+            mesh.order, scan.n_inverted[scan.orders.index(n)], n, m)
+    names, counts = mesh.edge_tags.unique(return_counts=True)
+    for name, n in zip(names, counts.tolist()):
+        lines.append("  %-14s : %d edges" % (name, n))
+    tags = tag_report(mesh)
+    lines.append("  %-14s : %d edges" % ("untagged bdry", tags.n_untagged_boundary))
+    lines.append("  %-14s : %d rows" % ("interior tags", tags.n_tagged_interior))
+    lines.append(topology.format_report(topology.quad_report(mesh.points, mesh.corners),
+                                        "quad"))
+    return "\n".join(lines)
+
+
 __all__ = [
+    "TagReport",
     "area",
     "bounds",
+    "boundary_edge_ids",
     "boundary_edges",
     "boundary_elements",
     "boundary_points",
     "centroid",
+    "edge_rows",
+    "edge_tag_rows",
     "element_areas",
     "element_blocks",
+    "is_conforming",
+    "is_overlap_free",
+    "is_watertight",
     "plane_normal",
     "quality_summary",
+    "report",
     "scaled_jacobian",
+    "tag_report",
     "tagged_edges",
+    "topology_report",
 ]

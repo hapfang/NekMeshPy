@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 from conftest import run_example
 
-from nekmeshpy import HexMesh, LineMesh, QuadMesh, hexmesh
+from nekmeshpy import HexMesh, LineMesh, QuadMesh, hexmesh, quadmesh
 
 _EXAMPLES = os.path.join(os.path.dirname(__file__), "..", "examples")
 
@@ -140,3 +140,16 @@ def test_every_example_is_covered_by_this_module():
     assert LIBRARY_ONLY <= set(ALL)
     assert EXCLUDED <= set(_scripts())
     assert KNOWN_INVERTED <= set(ALL)
+
+
+@pytest.mark.parametrize("name", ALL)
+def test_example_quad_mesh_is_a_closed_conformal_domain(name, _built):
+    """The quad rung's counterpart of the hex check above: a section mesh must be one
+    connected, conforming piece with no overlapping elements."""
+    ns = _built(name)
+    mesh = ns.get("mesh")
+    if not isinstance(mesh, QuadMesh):
+        pytest.skip("%s builds no section mesh" % name)
+    assert quadmesh.is_watertight(mesh)
+    assert quadmesh.is_conforming(mesh)
+    assert quadmesh.is_overlap_free(mesh)
