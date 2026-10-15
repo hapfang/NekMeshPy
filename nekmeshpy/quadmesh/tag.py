@@ -12,10 +12,10 @@ from collections.abc import Mapping, Sequence
 
 import numpy as np
 
-from ..tags.tags import ElementTagSpec
 from .._typing import IntArray, StrArray
 from ..linemesh import LineMesh
 from ..linemesh import tag as linemesh
+from ..tags.tags import ElementTagSpec
 from .quadmesh import QuadMesh
 
 

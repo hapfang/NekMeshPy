@@ -10,10 +10,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from ..tags.tags import ElementTagSpec
 from .._typing import IntArray, StrArray
 from ..quadmesh import QuadMesh
 from ..quadmesh import tag as quadmesh
+from ..tags.tags import ElementTagSpec
 from .hexmesh import HexMesh
 
 
