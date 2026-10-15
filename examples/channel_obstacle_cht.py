@@ -20,7 +20,6 @@ Produces ``channel_obstacle_cht.vtu``.
 
 import logging
 
-
 from nekmeshpy import quadmesh, writer
 from nekmeshpy.core.fields import geometric_spacing
 
