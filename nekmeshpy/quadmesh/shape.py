@@ -74,7 +74,8 @@ def rectangle(corners: PointArray | Sequence[Point], nx: int, ny: int, *,
               order: int = 1) -> QuadMesh:
     """Structured quad grid over the rectangle with four CCW corners ``corners = [c0,
     c1, c2, c3]``: ``nx`` cells along ``c0->c1`` (bottom/top), ``ny`` along ``c1->c2``
-    (left/right)."""
+    (left/right).  ``x_frac`` / ``y_frac`` are read along ``c0->c1`` / ``c1->c2``; the
+    opposite sides run the other way and take them mirrored, so grading stays aligned."""
     c = np.asarray(corners, dtype=float).reshape(-1, 3)
     if c.shape[0] != 4:
         raise ValueError("rectangle needs exactly 4 corners")
@@ -83,8 +84,10 @@ def rectangle(corners: PointArray | Sequence[Point], nx: int, ny: int, *,
     yf = (np.linspace(0.0, 1.0, ny + 1) if y_frac is None
           else np.asarray(y_frac, dtype=float).ravel())
     st = side_tags or {}
+    xr = xf if x_frac is None else 1.0 - xf[::-1]
+    yr = yf if y_frac is None else 1.0 - yf[::-1]
     specs = (("bottom", c[0], c[1], xf), ("right", c[1], c[2], yf),
-             ("top", c[2], c[3], xf), ("left", c[3], c[0], yf))
+             ("top", c[2], c[3], xr), ("left", c[3], c[0], yr))
     edges = [line(a, b, frac, element_tag=st.get(side, ""), order=order)
              for side, a, b, frac in specs]
     return structured(edges, element_tags=element_tags)

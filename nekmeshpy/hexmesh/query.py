@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from typing import NamedTuple
 
 import numpy as np
 
@@ -20,7 +19,7 @@ from ..core import conform, measure
 from ..core import quality as _core
 from ..core.interp import corner_indices
 from ..core.quality import OrderScan, QualitySummary, SolverMetrics
-from ..core.topology import TopologyReport
+from ..core.topology import TagReport, TopologyReport
 from .hexmesh import HexMesh
 
 _log = logging.getLogger(__name__)
@@ -255,31 +254,9 @@ def is_overlap_free(mesh: HexMesh) -> bool:
     from ..core import topology
     return topology.is_overlap_free(mesh.points, mesh.corners)
 
-class TagReport(NamedTuple):
-    """How a mesh's ``face_tags`` table lines up with its **topological** boundary.
-
-    The two are independent by design -- ``boundary`` is what connectivity says, a
-    side-tag table is a named subset that may also name interior planes -- so they can
-    disagree in exactly two ways, and both are worth seeing. An
-    :attr:`n_untagged_boundary` above zero means the export has open faces no boundary
-    condition covers; an :attr:`n_tagged_interior` above zero means it will write
-    boundary conditions onto faces that are not on the boundary at all. Either can be
-    deliberate (a flux-measurement plane is a tagged interior face; so is a conjugate
-    fluid/solid interface that keeps the fluid's wall condition), so these are counts
-    to recognise, not assertions."""
-
-    #: Named faces. One tag per shared face, so this counts faces, not rows -- the
-    #: two could differ only while a tag was addressed by ``(element, side)``.
-    n_rows: int
-    #: Faces on the topological boundary that carry no name.
-    n_untagged_boundary: int
-    #: Named faces that are **not** on the topological boundary.
-    n_tagged_interior: int
-
-
 def tag_report(mesh: HexMesh) -> TagReport:
     """Cross-check ``face_tags`` against the topological boundary (see
-    :class:`TagReport <nekmeshpy.hexmesh.query.TagReport>`)."""
+    :class:`TagReport <nekmeshpy.core.topology.TagReport>`)."""
     on_boundary = boundary_face_ids(mesh)
     ft = mesh.face_tags
     named = ft.is_tagged()

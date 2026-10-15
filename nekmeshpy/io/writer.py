@@ -25,6 +25,7 @@ from ..hexmesh.query import face_tag_rows
 from ..linemesh import LineMesh
 from ..quadmesh import QuadMesh
 from ..quadmesh.assemble import select as quadmesh_select
+from ..quadmesh.query import edge_tag_rows
 from ..tags import Tags
 
 # VTK cell-type ids: linear + high-order (Lagrange) line / quad / hex.
@@ -75,7 +76,15 @@ def _export_rows(mesh: HexMesh, bc: BoundaryConditions,
     <nekmeshpy.hexmesh.periodic.PeriodicPairs.partner_of>`; a row it does not name gets
     ``(-1, -1)``, which every writer but ``.re2`` drops on the floor."""
     rows, names = face_tag_rows(mesh)
-    regions = mesh.element_tags.take_dense(rows[:, 0])
+    return _resolve_rows(rows, names, mesh.element_tags.take_dense(rows[:, 0]), bc,
+                         partners, viewer=viewer)
+
+
+def _resolve_rows(rows: IntArray, names: Any, regions: Any, bc: BoundaryConditions,
+                  partners: Mapping[tuple[int, int], tuple[int, int]] | None,
+                  *, viewer: bool) -> list[tuple[int, int, str, str, int, int, int]]:
+    """:func:`_export_rows` over rows already read off a mesh -- the part that does not
+    depend on which rung they came from."""
     out: list[tuple[int, int, str, str, int, int, int]] = []
     for (elem, face), name, region in zip(rows.tolist(), names.tolist(),
                                           regions.tolist()):
@@ -95,7 +104,7 @@ def _export_rows(mesh: HexMesh, bc: BoundaryConditions,
     return out
 
 
-def _as_bc(mesh: HexMesh, bc: BCArg) -> BoundaryConditions:
+def _as_bc(mesh: HexMesh | QuadMesh, bc: BCArg) -> BoundaryConditions:
     """Normalise the ``bc`` argument to a ``BoundaryConditions``.
 
     A plain mapping is a velocity table. ``None`` enumerates the mesh's own tag
@@ -105,7 +114,9 @@ def _as_bc(mesh: HexMesh, bc: BCArg) -> BoundaryConditions:
     if isinstance(bc, BoundaryConditions):
         return bc
     if bc is None:
-        return BoundaryConditions({name: "E  " for name in mesh.face_group_tags})
+        names = (mesh.face_group_tags if isinstance(mesh, HexMesh)
+                 else mesh.edge_group_tags)
+        return BoundaryConditions({name: "E  " for name in names})
     return BoundaryConditions(bc)
 
 
@@ -185,10 +196,15 @@ def _fluid_first_order(mesh: HexMesh, fluid: FluidArg
     the right one for every single-domain mesh (``nelgv == nelgt``, no reorder) --
     and the ``None`` mask that comes back with it means exactly that: no region
     restricts any field, because there is only one."""
-    n = mesh.n_hexes
+    return _fluid_first(mesh.n_hexes, mesh.element_tags, fluid)
+
+
+def _fluid_first(n: int, tags: Tags, fluid: FluidArg
+                 ) -> tuple[IntArray, int, BoolArray | None]:
+    """:func:`_fluid_first_order` for any rung: ``n`` elements carrying region ``tags``."""
     if fluid is None:
         return np.arange(n, dtype=np.int64), n, None
-    mask: BoolArray = mask_for_selection(fluid, mesh.element_tags)
+    mask: BoolArray = mask_for_selection(fluid, tags)
     order: IntArray = np.concatenate(
         [np.flatnonzero(mask), np.flatnonzero(~mask)]).astype(np.int64)
     return order, int(np.count_nonzero(mask)), mask
@@ -255,7 +271,16 @@ def _field_rows(mesh: HexMesh, bc: BoundaryConditions, field: str,
     name that is stated but has **no** row inside ``mask`` at all is unambiguously a
     mistake -- the wrong field's table -- and raises rather than writing nothing."""
     rows, names = face_tag_rows(mesh)
-    regions = mesh.element_tags.take_dense(rows[:, 0])
+    return _resolve_field_rows(rows, names, mesh.element_tags.take_dense(rows[:, 0]),
+                               bc, field, partners, mask)
+
+
+def _resolve_field_rows(rows: IntArray, names: Any, regions: Any,
+                        bc: BoundaryConditions, field: str,
+                        partners: Mapping[tuple[int, int], tuple[int, int]],
+                        mask: BoolArray | None
+                        ) -> list[tuple[int, int, str, str, int, int, int]]:
+    """:func:`_field_rows` over rows already read off a mesh."""
     out: list[tuple[int, int, str, str, int, int, int]] = []
     inside: set[str] = set()
     outside: dict[str, int] = {}
@@ -279,6 +304,48 @@ def _field_rows(mesh: HexMesh, bc: BoundaryConditions, field: str,
                 "velocity-field code on a non-fluid element, or vice versa."
                 % (field, name, elem))
     return out
+
+
+def _write_re2(filename: str, elements: PointArray, nelv: int,
+               blocks: Sequence[Sequence[tuple[int, int, str, str, int, int, int]]],
+               new_id_of: IntArray) -> None:
+    """The binary ``.re2`` bytes: ``elements`` ``(N, corners, ndim)`` already in the
+    written (fluid-first) order, ``nelv`` the velocity-mesh count, and one boundary
+    block per field -- ``(element, face, name, code, boundaryID, partner element,
+    partner face)`` rows in the mesh's own numbering, read through ``new_id_of``.
+
+    ``ndim`` is the last axis of ``elements``: a 3-D hex writes ``x[8] y[8] z[8]``, a 2-D
+    quad ``x[4] y[4]``, which is how Nek's ``read_re2_data`` sizes the record."""
+    ndim = elements.shape[2]
+    with open(filename, "wb") as fid:
+        # nBCre2 -- the number of boundary blocks that follow, one per field.  Nek's
+        # own field count already falls back to 2 whenever nelgt>nelgv regardless of
+        # this value, but a reader that trusts it outright (``re2torea``) deserves the
+        # true count, not a name that happens not to matter to this particular check.
+        header = "#v004%16d%3d%16d%4d hdr" % (elements.shape[0], ndim, nelv, len(blocks))
+        fid.write(header.ljust(80).encode("ascii"))
+        fid.write(struct.pack("<f", np.float32(6.54321)))
+        for i in range(elements.shape[0]):
+            fid.write(struct.pack("<d", 0.0))
+            for axis in range(ndim):
+                fid.write(elements[i, :, axis].astype("<f8").tobytes())
+        fid.write(struct.pack("<d", 0.0))
+        for bnd in blocks:
+            fid.write(struct.pack("<d", float(len(bnd))))
+            for elem0, face, _name, code, bid, p_elem0, p_face in bnd:
+                buf2: FloatArray = np.zeros(8, dtype="<f8")
+                buf2[0] = float(new_id_of[elem0] + 1)
+                buf2[1] = float(face)
+                if p_elem0 >= 0:
+                    # bc(1), bc(2): the element and face on the other side of the
+                    # periodic boundary.  Element ids are 1-based on write, faces
+                    # already 1-6, and read through the same fluid-first permutation
+                    # as buf2[0].
+                    buf2[2] = float(new_id_of[p_elem0] + 1)
+                    buf2[3] = float(p_face)
+                buf2[6] = float(bid)                    # bc(5): Nek's boundaryID
+                buf2[7] = _str_to_double(code)
+                fid.write(buf2.tobytes())
 
 
 def to_re2(mesh: HexMesh, filename: str, *, bc: BCArg,
@@ -370,36 +437,66 @@ def to_re2(mesh: HexMesh, filename: str, *, bc: BCArg,
     new_id_of: IntArray = np.empty(n_hexes, dtype=np.int64)
     new_id_of[order] = np.arange(n_hexes, dtype=np.int64)
     elements = mesh.points[mesh.corners][order]      # (N,8,3), fluid-first
-    with open(filename, "wb") as fid:
-        # nBCre2 -- the number of boundary blocks that follow, one per field.  Nek's
-        # own field count already falls back to 2 whenever nelgt>nelgv regardless of
-        # this value, but a reader that trusts it outright (``re2torea``) deserves the
-        # true count, not a name that happens not to matter to this particular check.
-        header = "#v004%16d%3d%16d%4d hdr" % (elements.shape[0], 3, nelv, len(blocks))
-        fid.write(header.ljust(80).encode("ascii"))
-        fid.write(struct.pack("<f", np.float32(6.54321)))
-        for i in range(elements.shape[0]):
-            fid.write(struct.pack("<d", 0.0))
-            fid.write(elements[i, :, 0].astype("<f8").tobytes())
-            fid.write(elements[i, :, 1].astype("<f8").tobytes())
-            fid.write(elements[i, :, 2].astype("<f8").tobytes())
-        fid.write(struct.pack("<d", 0.0))
-        for bnd in blocks:
-            fid.write(struct.pack("<d", float(len(bnd))))
-            for elem0, face, _name, code, bid, p_elem0, p_face in bnd:
-                buf2: FloatArray = np.zeros(8, dtype="<f8")
-                buf2[0] = float(new_id_of[elem0] + 1)
-                buf2[1] = float(face)
-                if p_elem0 >= 0:
-                    # bc(1), bc(2): the element and face on the other side of the
-                    # periodic boundary.  Element ids are 1-based on write, faces
-                    # already 1-6, and read through the same fluid-first permutation
-                    # as buf2[0].
-                    buf2[2] = float(new_id_of[p_elem0] + 1)
-                    buf2[3] = float(p_face)
-                buf2[6] = float(bid)                    # bc(5): Nek's boundaryID
-                buf2[7] = _str_to_double(code)
-                fid.write(buf2.tobytes())
+    _write_re2(filename, elements, nelv, blocks, new_id_of)
+    return mesh
+
+
+def quad_to_re2(mesh: QuadMesh, filename: str, *, bc: BCArg,
+                fluid: FluidArg = None) -> QuadMesh:
+    """Write the binary 2-D Nek ``.re2`` of a ``QuadMesh`` -- :func:`to_re2` one rung
+    down, with the same ``bc=`` / ``fluid=`` contract: ``bc`` is required, a
+    ``BoundaryConditions`` carries a velocity and a ``temperature`` table, ``fluid``
+    names the velocity-mesh region and is written **first**, and a mesh with a solid
+    region (``nelgv < nelgt``) needs ``bc.temperature`` for its second boundary block.
+
+    The mesh is written **linear** (4 corners a quad, ``x[4] y[4]``) at any order, and
+    must lie in a ``z = const`` plane: a 2-D ``.re2`` carries no ``z``.  A side name
+    is an edge name, and Nek's face ``1..4`` is the quad's own local edge order, so a
+    row is ``(quad, edge)`` with no remapping.
+
+    There is no ``periodic=`` here: a periodic pairing is hex-only (:func:`to_re2`), so
+    a name coded ``'P  '`` is refused rather than written with partner element 0."""
+    if bc is None:
+        raise ValueError(
+            "quad_to_re2 needs bc=: a name -> Nek BC code mapping for %s. The .re2 "
+            "boundary block is boundary *conditions*, so there is no default that "
+            "would not be a guess."
+            % (", ".join(repr(n) for n in mesh.edge_group_tags) or "no named edges"))
+    bc = _as_bc(mesh, bc)
+    for field in bc.fields:
+        if bc.names_with(field, PERIODIC_CODE):
+            raise ValueError(
+                "quad_to_re2: %s codes %s as periodic ('P  '), but a periodic pairing "
+                "is hex-only, so there is no partner element to write."
+                % (field, ", ".join(repr(n) for n in
+                                    sorted(bc.names_with(field, PERIODIC_CODE)))))
+    z = mesh.points[:, 2]
+    if z.size and float(z.max() - z.min()) > 1e-8 * max(1.0, float(np.abs(z).max())):
+        raise ValueError(
+            "quad_to_re2: the mesh is not in a z = const plane (z spans %.3e); a 2-D "
+            ".re2 has no z coordinate." % float(z.max() - z.min()))
+    n = mesh.n_quads
+    order, nelv, fluid_mask = _fluid_first(n, mesh.element_tags, fluid)
+    has_temperature = "temperature" in bc.fields
+    if nelv < n and not has_temperature:
+        raise ValueError(
+            "quad_to_re2: fluid=%r covers %d of this mesh's %d elements. Nek's .re2 "
+            "format always carries a boundary block per field once nelgv < nelgt -- "
+            "so bc needs a temperature table too: a name -> code mapping for the "
+            "temperature field, covering every element (a name left out of it stays "
+            "conformal, 'E  ')." % (fluid, nelv, n))
+    rows, names = edge_tag_rows(mesh)
+    regions = mesh.element_tags.take_dense(rows[:, 0])
+    if not has_temperature:
+        blocks = [_resolve_rows(rows, names, regions, bc, None, viewer=False)]
+    else:
+        blocks = [_resolve_field_rows(rows, names, regions, bc, "velocity", {},
+                                      fluid_mask),
+                  _resolve_field_rows(rows, names, regions, bc, "temperature", {}, None)]
+    new_id_of: IntArray = np.empty(n, dtype=np.int64)
+    new_id_of[order] = np.arange(n, dtype=np.int64)
+    elements = mesh.points[mesh.corners][order][:, :, :2]      # (N,4,2), fluid-first
+    _write_re2(filename, elements, nelv, blocks, new_id_of)
     return mesh
 
 
