@@ -201,8 +201,9 @@ mesh_bc = BoundaryConditions(
                  "zlo_solid": ("P  ", 9), "zhi_solid": ("P  ", 10)})
 
 core_periodic = [hexmesh.Periodic("inlet", "outlet", axial)]
-core_bc = BoundaryConditions(velocity={"overlap": ("int", 1), "inlet": ("P  ", 2),
-                                       "outlet": ("P  ", 3)})
+core_bc = BoundaryConditions(
+    velocity={"overlap": ("int", 1), "inlet": ("P  ", 2), "outlet": ("P  ", 3)},
+    temperature={"overlap": ("int", 1), "inlet": ("P  ", 2), "outlet": ("P  ", 3)})
 
 print(hexmesh.report(mesh))
 print(hexmesh.report(core))
