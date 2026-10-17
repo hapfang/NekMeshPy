@@ -193,17 +193,17 @@ mesh_periodic = [
 ]
 mesh_bc = BoundaryConditions(
     velocity={"coil": ("v  ", 1), "wall": ("W  ", 2), "core": ("int", 3),
-              "inlet": ("P  ", 4), "outlet": ("P  ", 5), "zlo": ("P  ", 6), "zhi": ("P  ", 7)},
+              "inlet": ("P  ", 0), "outlet": ("P  ", 0), "zlo": ("P  ", 0), "zhi": ("P  ", 0)},
     temperature={"core": ("int", 1), "outer": ("f  ", 2),
-                 "inlet": ("P  ", 3), "outlet": ("P  ", 4),
-                 "cut_lo": ("P  ", 5), "cut_hi": ("P  ", 6),
-                 "zlo": ("P  ", 7), "zhi": ("P  ", 8),
-                 "zlo_solid": ("P  ", 9), "zhi_solid": ("P  ", 10)})
+                 "inlet": ("P  ", 0), "outlet": ("P  ", 0),
+                 "cut_lo": ("P  ", 0), "cut_hi": ("P  ", 0),
+                 "zlo": ("P  ", 0), "zhi": ("P  ", 0),
+                 "zlo_solid": ("P  ", 0), "zhi_solid": ("P  ", 0)})
 
 core_periodic = [hexmesh.Periodic("inlet", "outlet", axial)]
 core_bc = BoundaryConditions(
-    velocity={"overlap": ("int", 1), "inlet": ("P  ", 2), "outlet": ("P  ", 3)},
-    temperature={"overlap": ("int", 1), "inlet": ("P  ", 2), "outlet": ("P  ", 3)})
+    velocity={"overlap": ("int", 1), "inlet": ("P  ", 0), "outlet": ("P  ", 0)},
+    temperature={"overlap": ("int", 1), "inlet": ("P  ", 0), "outlet": ("P  ", 0)})
 
 print(hexmesh.report(mesh))
 print(hexmesh.report(core))
