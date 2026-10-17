@@ -16,7 +16,7 @@ sweep's inner face rather than meeting it node for node.  Both faces are ``int``
 
     PYTHONPATH=. python examples/wire_coil_neknek.py
 
-Produces ``wire_coil_neknek.re2`` / ``.vtu`` and ``wire_coil_neknek_core.re2`` / ``.vtu``.
+Produces ``wire_coil_neknek`` and ``wire_coil_neknek_core`` as ``.re2``, ``.vtu`` and ``.f00000``.
 """
 import numpy as np
 
@@ -214,4 +214,6 @@ writer.to_re2(mesh, "wire_coil_neknek.re2", bc=mesh_bc, periodic=mesh_periodic, 
 writer.to_re2(core, "wire_coil_neknek_core.re2", bc=core_bc, periodic=core_periodic)
 writer.to_vtu(mesh, "wire_coil_neknek.vtu", bc=mesh_bc)
 writer.to_vtu(core, "wire_coil_neknek_core.vtu", bc=core_bc)
+writer.to_fld(mesh, "wire_coil_neknek.f00000", fluid="fluid")
+writer.to_fld(core, "wire_coil_neknek_core.f00000")
 
