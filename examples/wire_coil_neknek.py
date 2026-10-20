@@ -192,7 +192,7 @@ mesh_periodic = [
     hexmesh.Periodic("zlo_solid", "zhi_solid", axial),
 ]
 mesh_bc = BoundaryConditions(
-    velocity={"coil": ("v  ", 1), "wall": ("W  ", 2), "core": ("int", 3),
+    velocity={"core": ("int", 1), "coil": ("v  ", 2), "wall": ("W  ", 3),
               "inlet": ("P  ", 0), "outlet": ("P  ", 0), "zlo": ("P  ", 0), "zhi": ("P  ", 0)},
     temperature={"core": ("int", 1), "outer": ("f  ", 2),
                  "inlet": ("P  ", 0), "outlet": ("P  ", 0),
