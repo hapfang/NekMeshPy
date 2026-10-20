@@ -43,7 +43,7 @@ VEL_BC  = {"wall": 1    , "inlet": 2    , "outlet": 3    }  # boundaryID only
   If only `velocity` is specified, only 1 set of BC for velocity is written to `.re2`.
 - `writer.to_vtu` will write `boundaryID` if provided. Else, `to_vtu` will use the ordering of
   given `cbc` as id.
-- Note that in NekNek, interpolation BC "int" requires both meshes to have the same `boundaryID` for `velocity` and `temperature`.
+- Note that in NekNek, interpolation BC "int" requires both `velocity` and `temperature` to have the same `boundaryID`.
 
 ## Conjugate heat transfer
 
