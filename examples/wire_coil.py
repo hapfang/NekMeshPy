@@ -556,8 +556,8 @@ assert set(np.flatnonzero(_conj)) == _named, \
 VEL_BC = {
     "coil": ("v  ", 1),
     "wall": ("W  ", 2),
-    "inlet":  ("P  ", 3),
-    "outlet": ("P  ", 4),
+    "inlet":  ("P  ", 0),
+    "outlet": ("P  ", 0),
 }
 PERIODIC = [
     hexmesh.Periodic("inlet", "outlet", affine.translation([0.0, 0.0, LEAD])),
@@ -565,10 +565,10 @@ PERIODIC = [
 ]
 TEMP_BC = {
     "outer":  ("f  ", 1),
-    "inlet":  ("P  ", 2),
-    "outlet": ("P  ", 3),
-    "cut_lo": ("P  ", 4),
-    "cut_hi": ("P  ", 5),
+    "inlet":  ("P  ", 0),
+    "outlet": ("P  ", 0),
+    "cut_lo": ("P  ", 0),
+    "cut_hi": ("P  ", 0),
 }
 
 print(hexmesh.report(mesh))

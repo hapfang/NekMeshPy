@@ -23,13 +23,13 @@ R_OUT = R_IN + THICKNESS
 
 # boundary name -> (Nek BC code, boundaryID), applied only at export
 VEL_BC =  {"interface": ("W  ", 1),
-           "inlet"    : ("P  ", 2),
-           "outlet"   : ("P  ", 2)}
+           "inlet"    : ("P  ", 0),
+           "outlet"   : ("P  ", 0)}
 TEMP_BC = {"outer"    : ("I  ", 1),
-           "inlet"    : ("P  ", 2),
-           "outlet"   : ("P  ", 2),
-           "solid_in" : ("P  ", 3),
-           "solid_out": ("P  ", 3)}
+           "inlet"    : ("P  ", 0),
+           "outlet"   : ("P  ", 0),
+           "solid_in" : ("P  ", 0),
+           "solid_out": ("P  ", 0)}
 BC = BoundaryConditions(velocity=VEL_BC, temperature=TEMP_BC)
 PERIODIC = [
     hexmesh.Periodic("inlet", "outlet", affine.translation([0.0, 0.0, LENGTH])),
