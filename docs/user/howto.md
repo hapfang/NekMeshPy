@@ -43,6 +43,7 @@ VEL_BC  = {"wall": 1    , "inlet": 2    , "outlet": 3    }  # boundaryID only
   If only `velocity` is specified, only 1 set of BC for velocity is written to `.re2`.
 - `writer.to_vtu` will write `boundaryID` if provided. Else, `to_vtu` will use the ordering of
   given `cbc` as id.
+- Note that in NekNek, interpolation BC "int" requires both meshes to have the same `boundaryID` for `velocity` and `temperature`.
 
 ## Conjugate heat transfer
 
@@ -115,7 +116,7 @@ from nekmeshpy import hexmesh
 from nekmeshpy.core import affine
 
 PERIODIC = [hexmesh.Periodic("inlet", "outlet", affine.translation([0.0, 0.0, LENGTH]))]
-VEL_BC = {"wall": ("W  ", 1), "inlet": ("P  ", 2), "outlet": ("P  ", 2)}
+VEL_BC = {"wall": ("W  ", 1), "inlet": ("P  ", 0), "outlet": ("P  ", 0)}
 
 writer.to_re2(mesh, "case.re2", bc=VEL_BC, periodic=PERIODIC)
 ```
@@ -132,5 +133,6 @@ writer.to_re2(mesh, "case.re2", bc=VEL_BC, periodic=PERIODIC)
   the global frame: Nek does not rotate vectors across a periodic face.
 - A pair already resolved with `hexmesh.periodic_pairs(mesh, PERIODIC)` can be passed as
   `periodic=` instead.
+- Note that in Nek, periodic is required to be tagged with `cbc="P  "` and `boundaryID=0`.
 
 Example: `wire_coil.py`.

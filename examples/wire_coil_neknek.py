@@ -16,7 +16,7 @@ sweep's inner face rather than meeting it node for node.  Both faces are ``int``
 
     PYTHONPATH=. python examples/wire_coil_neknek.py
 
-Produces ``wire_coil_neknek.re2`` / ``.vtu`` and ``wire_coil_neknek_core.re2`` / ``.vtu``.
+Produces ``wire_coil_neknek`` and ``wire_coil_neknek_core`` as ``.re2``, ``.vtu`` and ``.f00000``.
 """
 import numpy as np
 
@@ -192,17 +192,18 @@ mesh_periodic = [
     hexmesh.Periodic("zlo_solid", "zhi_solid", axial),
 ]
 mesh_bc = BoundaryConditions(
-    velocity={"coil": ("v  ", 1), "wall": ("W  ", 2), "core": ("int", 3),
-              "inlet": ("P  ", 4), "outlet": ("P  ", 5), "zlo": ("P  ", 6), "zhi": ("P  ", 7)},
+    velocity={"core": ("int", 1), "coil": ("v  ", 2), "wall": ("W  ", 3),
+              "inlet": ("P  ", 0), "outlet": ("P  ", 0), "zlo": ("P  ", 0), "zhi": ("P  ", 0)},
     temperature={"core": ("int", 1), "outer": ("f  ", 2),
-                 "inlet": ("P  ", 3), "outlet": ("P  ", 4),
-                 "cut_lo": ("P  ", 5), "cut_hi": ("P  ", 6),
-                 "zlo": ("P  ", 7), "zhi": ("P  ", 8),
-                 "zlo_solid": ("P  ", 9), "zhi_solid": ("P  ", 10)})
+                 "inlet": ("P  ", 0), "outlet": ("P  ", 0),
+                 "cut_lo": ("P  ", 0), "cut_hi": ("P  ", 0),
+                 "zlo": ("P  ", 0), "zhi": ("P  ", 0),
+                 "zlo_solid": ("P  ", 0), "zhi_solid": ("P  ", 0)})
 
 core_periodic = [hexmesh.Periodic("inlet", "outlet", axial)]
-core_bc = BoundaryConditions(velocity={"overlap": ("int", 1), "inlet": ("P  ", 2),
-                                       "outlet": ("P  ", 3)})
+core_bc = BoundaryConditions(
+    velocity={"overlap": ("int", 1), "inlet": ("P  ", 0), "outlet": ("P  ", 0)},
+    temperature={"overlap": ("int", 1), "inlet": ("P  ", 0), "outlet": ("P  ", 0)})
 
 print(hexmesh.report(mesh))
 print(hexmesh.report(core))
@@ -213,4 +214,6 @@ writer.to_re2(mesh, "wire_coil_neknek.re2", bc=mesh_bc, periodic=mesh_periodic, 
 writer.to_re2(core, "wire_coil_neknek_core.re2", bc=core_bc, periodic=core_periodic)
 writer.to_vtu(mesh, "wire_coil_neknek.vtu", bc=mesh_bc)
 writer.to_vtu(core, "wire_coil_neknek_core.vtu", bc=core_bc)
+writer.to_fld(mesh, "wire_coil_neknek.f00000", fluid="fluid")
+writer.to_fld(core, "wire_coil_neknek_core.f00000")
 
